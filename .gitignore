@@ -1,0 +1,7 @@
+notes.txt
+venv/
+text/
+__pycache__/*
+*.pyc
+metadata.json
+engineer.db
