@@ -92,7 +92,6 @@ def run(path: Path) -> list[Converted]:
     return result
 
 
-
 if __name__ == '__main__':
     args = get_pdf2text_args()
     input_: Path = args.input

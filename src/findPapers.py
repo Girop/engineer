@@ -3,31 +3,22 @@ from pdfminer.converter import TextConverter
 from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
 import io
-from embed import Result, EmbedderType
+from embed import GeneralEmbedder, Result, EmbedderType
 from dbTypes import Embedders, EmbeddingData
 import numpy as np
 from dataclasses import dataclass
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 from enum import Enum
-from typing import Union
-from embed import Embedder
+from typing import Optional
+from embed import BertEmbedder, GloveEmbedder
 import requests
 
 
-def load_data(res: Result):
-    values = res.get_values(EmbedderType.BERT.value)
-
-    embeddings: list[np.ndarray] = []
-    names: list[str] = []
-
-    for value in values:
-        data: EmbeddingData = value[0]
-        embedder: Embedders = value[1]
-        embeddings.append(np.frombuffer(data.values, np.float16, embedder.shape))
-        names.append(data.fileName)
-    return embeddings, names
-
+class RecommendationException(Exception):
+    def __init__(self, message) -> None:
+        self.message = message
+        super().__init__(message)
 
 def pdf2text(bytes_):
     pdf_file = io.BytesIO(bytes_)
@@ -49,11 +40,6 @@ def id_to_url(id: str) -> str:
     return f"https://arxiv.org/pdf/{id}"
 
 
-def split_text(text: str) -> list[str]:
-    return [
-            line.strip() for line in
-            text.split('\n') if len(line) != 0
-    ][:4092]
 
 
 class ReqType(Enum):
@@ -64,8 +50,9 @@ class ReqType(Enum):
 
 @dataclass
 class RecomendationReq:
-    reqType: ReqType
-    value: Union[bytes, str]
+    req_type: ReqType
+    used_model: EmbedderType
+    value: str
 
 
 @dataclass
@@ -76,56 +63,53 @@ class Recommendation:
 
 
 class Recommender:
-    def __init__(self):
+    def __init__(self, mode: EmbedderType):
         print("Loading data")
         self.result = Result()
-        embeddings, names = load_data(self.result)
         self.__scaler = StandardScaler()
-        self.__data_stacked = np.vstack(self.__scaler.fit_transform(embeddings))
-        self.__names = names
-        self.__embedder = Embedder()
-
+        self.__embedder = GeneralEmbedder(mode)
+        data = self.result.get_values(mode)
+        self.__names = [name for name, _ in data]
+        numbers = [number for _, number in data]
+        self.__data = np.vstack(self.__scaler.fit_transform(numbers))
 
     def recomend_paper(self, req: RecomendationReq, limit = 10) -> list[Recommendation]:
-        if req.reqType != ReqType.ARXIV_ID:
-            print("TODO: othere sources")
-            exit()
+        if req.req_type != ReqType.ARXIV_ID:
+            raise RecommendationException("Unsupported mode")
 
-        text = self.__arxiv_id_to_txt(req.value)
-        if text is None:
-            print("Failed something")
-            exit()
+        if (text := self.__arxiv_id_to_txt(req.value)) is None:
+            raise RecommendationException("Article download failed")
 
         print("Evaluating")
-        reference_article = self.__embedder.get(text)
+        embedding_values = self.__embedder.get(text)
 
-        if req.reqType == ReqType.ARXIV_ID and req.value not in self.__names:
-            # TODO validate that the article under this ID was downloaded & don't evaluate it if it already exists in db
+        if req.req_type == ReqType.ARXIV_ID and req.value not in self.result.get_processed_names(req.used_model):
             print("Saving to db")
-            self.result.add(req.value, reference_article, 1)
+            self.result.add(req.value, embedding_values, req.used_model.value)
 
         print("Transforming")
-        scaled = self.__scaler.transform(reference_article.reshape(1, -1))
-        distances = cosine_similarity(self.__data_stacked, scaled)
+        return self.__recommend(embedding_values, limit)
+
+    def __recommend(self, embedding_values: np.ndarray, limit: int) -> list[Recommendation]:
+        scaled = self.__scaler.transform(embedding_values.reshape(1, -1))
+        distances = cosine_similarity(self.__data, scaled)
         named_points = sorted(zip(distances, self.__names), key=lambda x: x[0], reverse=True)
         return [
-            Recommendation(point[1], point[0], 0) for point in named_points[:limit]
+            Recommendation(point[1], point[0][0], 0) for point in named_points[:limit]
         ]
 
 
-    def __arxiv_id_to_txt(self, id: str) -> list[str]:
+    def __arxiv_id_to_txt(self, id: str) -> Optional[str]:
         print("Downloading")
         res = requests.get(id_to_url(id))
         if not res.ok:
-            print("Failed request")
-            return []
-        return split_text(pdf2text(res.content))
+            return None
+        return pdf2text(res.content)
 
 
 if __name__ == '__main__':
     my_id = "2410.24080"
-    recomender = Recommender()
-    found = recomender.recomend_paper(RecomendationReq(ReqType.ARXIV_ID, my_id))
-    for rec in found:
-        print(rec)
+    recomender = Recommender(EmbedderType.GLOVE)
+    found = recomender.recomend_paper(RecomendationReq(ReqType.ARXIV_ID, EmbedderType.BERT, my_id))
+    print(found)
     recomender.result.finish()
