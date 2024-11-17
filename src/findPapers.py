@@ -4,14 +4,13 @@ from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
 import io
 from embed import GeneralEmbedder, Result, EmbedderType
-from dbTypes import Embedders, EmbeddingData
+from dbTypes import Metadata
 import numpy as np
 from dataclasses import dataclass
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
+from sklearn.metrics.pairwise import cosine_similarity
 from enum import Enum
 from typing import Optional
-from embed import BertEmbedder, GloveEmbedder
 import requests
 
 
@@ -59,7 +58,9 @@ class RecomendationReq:
 class Recommendation:
     arxiv_id: str
     similarity_score: float # allowed range [-1, 1]
-    distance: float
+    title: str
+    category: str
+    date: str
 
 
 class Recommender:
@@ -83,9 +84,9 @@ class Recommender:
         print("Evaluating")
         embedding_values = self.__embedder.get(text)
 
-        if req.req_type == ReqType.ARXIV_ID and req.value not in self.result.get_processed_names(req.used_model):
-            print("Saving to db")
-            self.result.add(req.value, embedding_values, req.used_model.value)
+        # if req.req_type == ReqType.ARXIV_ID and req.value not in self.result.get_processed_names(req.used_model):
+        #     print("Saving to db")
+        #     self.result.add(req.value, embedding_values, req.used_model.value)
 
         print("Transforming")
         return self.__recommend(embedding_values, limit)
@@ -93,10 +94,12 @@ class Recommender:
     def __recommend(self, embedding_values: np.ndarray, limit: int) -> list[Recommendation]:
         scaled = self.__scaler.transform(embedding_values.reshape(1, -1))
         distances = cosine_similarity(self.__data, scaled)
-        named_points = sorted(zip(distances, self.__names), key=lambda x: x[0], reverse=True)
-        return [
-            Recommendation(point[1], point[0][0], 0) for point in named_points[:limit]
-        ]
+        distance_point = sorted(zip(distances, self.__names), key=lambda x: x[0], reverse=True)
+        result = []
+        for distance, arxiv_id in distance_point[:limit]:
+            meta = self.result.get_metadata(arxiv_id)
+            result.append(Recommendation(arxiv_id, distance[0], meta.title, meta.categories, meta.update_date))
+        return result
 
 
     def __arxiv_id_to_txt(self, id: str) -> Optional[str]:

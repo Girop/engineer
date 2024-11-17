@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from embed import EmbedderType
 from findPapers import RecommendationException, Recommender, RecomendationReq, ReqType
 import dataclasses
-
 
 app = FastAPI()
 
@@ -14,6 +14,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+global_bert = Recommender(EmbedderType.BERT)
+global_glove = Recommender(EmbedderType.GLOVE)
+
+def server_recommend(mode, req, limit):
+    get_papers = lambda r: r.recomend_paper(req)[:limit + 20]
+    seen = set()
+    res = []
+    for item in get_papers(global_bert if mode == EmbedderType.BERT else global_glove):
+        if (simple_id := item.arxiv_id.split('v')[0]) not in seen:
+            res.append(dataclasses.asdict(item))
+            seen.add(simple_id)
+    return res
 
 @app.get("/")
 async def read_root():
@@ -31,16 +43,10 @@ async def recommend(document_id: str, mode: int):
     if mode not in avalible_modes:
         return {'error': 'Invalid mode provided', 'result': result}
 
-    req = RecomendationReq(ReqType.ARXIV_ID, document_id)
+    req = RecomendationReq(ReqType.ARXIV_ID, EmbedderType(mode), document_id)
     try:
-        recommender = Recommender()
+        result.extend(server_recommend(mode, req, limit))
+
     except RecommendationException as e:
         return {'error': f'Recommendation failed: {e.message}', 'result': result}
-
-
-    result.extend([
-        dataclasses.asdict(item) for item in
-        recommender.recomend_paper(req)[:limit]
-    ])
-    recommender.result.finish()
     return {'error': 'None', 'result': result}

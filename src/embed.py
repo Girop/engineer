@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
-from dbTypes import EmbeddingData, Embedders, Base
+from dbTypes import EmbeddingData, Embedders, Base, Metadata
 import gensim
 import torch
 from transformers import BertModel, BertTokenizer
@@ -55,9 +55,6 @@ class GloveEmbedder(Embedder):
             if tok in self.__glove_dict
         ]
         res = np.mean(result, axis=0)
-        print(res.dtype)
-        print(res.shape)
-        exit()
         return res
 
 
@@ -122,18 +119,19 @@ class Result:
     def get_values(self, embedder_type: EmbedderType) -> list[tuple[str, np.ndarray]]:
         query = (
             select(EmbeddingData, Embedders)
-            .join(Embedders, EmbeddingData.usedModelId == Embedders.modelId)
             .filter(EmbeddingData.usedModelId == embedder_type.value)
+            .join(Embedders, EmbeddingData.usedModelId == Embedders.modelId)
         )
         result = self.__session.execute(query).fetchall()
         used_float = np.float16 if embedder_type == EmbedderType.BERT else np.float32
-        print(used_float)
-        print(result[0][1].shape)
-        print(result[0].values)
+
         return [
             (values.fileName, np.frombuffer(values.values, used_float, embedder.shape))
             for values, embedder in result
         ]
+
+    def get_metadata(self, paper_id: str) -> Metadata:
+        return self.__session.query(Metadata).filter(Metadata.article_id == paper_id.split('v')[0]).first()
 
     def add(self, filename: str, emebdding: np.ndarray, model_id: int):
         try:

@@ -104,5 +104,5 @@ if __name__ == '__main__':
 
     out.mkdir(exist_ok=True)
     converted_arr = run(input_)
-    with open(out / f"conversion.json", "w+") as fp:
-        json.dump(conversion_stats, fp)
+    # with open(out / f"conversion.json", "w+") as fp:
+    #     json.dump(conversion_stats, fp)
