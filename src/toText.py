@@ -68,7 +68,7 @@ def save_conversions(converted: Converted):
         fp.write(converted.content)
 
 
-def run(path: Path) -> list[Converted]:
+def run(path: Path, stats: dict[str, int]) -> list[Converted]:
     path_arr = list(path.iterdir()) if path.is_dir() else [path]
 
     result = []
@@ -77,17 +77,17 @@ def run(path: Path) -> list[Converted]:
         final_path: Path = out / file.with_suffix('.txt').name
         if final_path.exists():
             print(f"Skipping {final_path}")
+            stats['skipped'] += 1
             continue
         try:
             converted = path2text(file)
             if verify_content(converted.content, 0.20):
                 save_conversions(converted)
+                stats['successful'] += 1
             else:
-                conversion_stats['files'].append(file.name)
-                conversion_stats['unreadable'] += 1
+                stats['unreadable'] += 1
         except Exception as e:
-            conversion_stats['failed'] += 1
-            conversion_stats['files'].append(file.name)
+            stats['failed'] += 1
             print(f"Failed conversion: {e}")
     return result
 
@@ -96,13 +96,17 @@ if __name__ == '__main__':
     args = get_pdf2text_args()
     input_: Path = args.input
     out: Path = args.output
-    conversion_stats = {
-        'failed': 0,
-        'unreadable': 0,
-        'files': []
-    }
 
+    conversion_stats = {
+         'failed': 0,
+         'unreadable': 0,
+         'successful': 0,
+         'skipped': 0,
+     }
+
+    stat_save_path = Path(f"stats/{input_.name}.json")
     out.mkdir(exist_ok=True)
-    converted_arr = run(input_)
-    # with open(out / f"conversion.json", "w+") as fp:
-    #     json.dump(conversion_stats, fp)
+    stat_save_path.parent.mkdir(exist_ok=True)
+    converted_arr = run(input_, conversion_stats)
+    with open(stat_save_path, "w+") as fp:
+        json.dump(conversion_stats, fp)

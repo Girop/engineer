@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from embed import EmbedderType
-from findPapers import RecommendationException, Recommender, RecomendationReq, ReqType
+from findPapers import *
 import dataclasses
 
 app = FastAPI()
@@ -14,28 +14,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-global_bert = Recommender(EmbedderType.BERT)
-global_glove = Recommender(EmbedderType.GLOVE)
+global_bert = RecommenderEmb(EmbedderType.BERT)
+global_glove = RecommenderEmb(EmbedderType.GLOVE)
+global_idf = TfRecommender()
 
-def server_recommend(mode, req, limit):
-    get_papers = lambda r: r.recomend_paper(req)[:limit + 20]
-    seen = set()
-    res = []
-    for item in get_papers(global_bert if mode == EmbedderType.BERT else global_glove):
-        if (simple_id := item.arxiv_id.split('v')[0]) not in seen:
-            res.append(dataclasses.asdict(item))
-            seen.add(simple_id)
-    return res
+
+def get_method(mode: EmbedderType):
+    if mode == EmbedderType.GLOVE:
+        return global_glove
+    if mode == EmbedderType.BERT:
+        return global_bert
+    return global_idf
+
+
+def server_recommend(req: RecomendationReq, limit: int):
+    embedder = get_method(req.mode)
+    return [
+        dataclasses.asdict(item) for item in
+        embedder.recommend_paper(req, limit)
+    ]
+
 
 @app.get("/")
 async def read_root():
     return {"message": "Hello, World!"}
 
 
-@app.get('/recommend/id/{document_id}/{mode}')
-async def recommend(document_id: str, mode: int):
+@app.get('/recommend/')
+async def recommend(document_id: str, mode: int, limit: int):
     avalible_modes = [1,2,3]
-    limit = 10
     result = []
     if document_id == '':
         return {'error': 'No document provided', 'result': result}
@@ -45,8 +52,7 @@ async def recommend(document_id: str, mode: int):
 
     req = RecomendationReq(ReqType.ARXIV_ID, EmbedderType(mode), document_id)
     try:
-        result.extend(server_recommend(mode, req, limit))
-
+        result.extend(server_recommend(req, min(limit, 25)))
     except RecommendationException as e:
         return {'error': f'Recommendation failed: {e.message}', 'result': result}
     return {'error': 'None', 'result': result}

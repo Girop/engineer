@@ -30,7 +30,6 @@ class EmbedderType(Enum):
 def parse_embed_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=Path, default="text", help='directory with text files')
-    parser.add_argument('-o', '--output', type=Path, default='database')
     parser.add_argument('-m', '--mode', type=int, required=True)
     return parser.parse_args()
 
@@ -71,7 +70,7 @@ class BertEmbedder(Embedder):
     def read_doc(filepath: Path) -> list[str]:
         with open(filepath, encoding='utf-8') as fp:
             content = fp.readlines()
-        return [line.strip() for line in content if len(line) != 0][:2048]
+        return [line.strip() for line in content if len(line) != 0][:512]
 
 
     def get_from_file(self, path: Path) -> np.ndarray:
@@ -161,8 +160,7 @@ class GeneralEmbedder:
         elif embedder_type == EmbedderType.GLOVE:
             return GloveEmbedder
         else:
-            print("Unimplemented")
-            exit()
+            raise Exception("Unimplemented method")
 
     def __remove_versioned(self, input_files: set[Path]) -> list[Path]:
         seen: list[Path] = []
@@ -177,7 +175,7 @@ class GeneralEmbedder:
         files = list(in_dir.iterdir())
         previous = [in_dir / (prev_stem + ".txt") for prev_stem in processed_stems]
         skipped = set(files).intersection(set(previous))
-        # TODO I do not account for versioned ones
+
         print(f"All files: {len(files)}")
         print(f"Articles to be processed: {len(files) - len(skipped)}, Skipping: {len(skipped)} + versioned")
         return self.__remove_versioned(set(files) - set(previous))

@@ -2,9 +2,11 @@ from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import TextConverter
 from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
+from sklearn.feature_extraction.text import TfidfVectorizer
+import pandas as pd
+from pathlib import Path
 import io
 from embed import GeneralEmbedder, Result, EmbedderType
-from dbTypes import Metadata
 import numpy as np
 from dataclasses import dataclass
 from sklearn.preprocessing import StandardScaler
@@ -12,12 +14,23 @@ from sklearn.metrics.pairwise import cosine_similarity
 from enum import Enum
 from typing import Optional
 import requests
+import pickle
 
 
 class RecommendationException(Exception):
     def __init__(self, message) -> None:
         self.message = message
         super().__init__(message)
+
+@dataclass
+class Recommendation:
+    arxiv_id: str
+    similarity_score: float
+    title: str
+    category: str
+    authors: str
+    date: str
+
 
 def pdf2text(bytes_):
     pdf_file = io.BytesIO(bytes_)
@@ -39,6 +52,12 @@ def id_to_url(id: str) -> str:
     return f"https://arxiv.org/pdf/{id}"
 
 
+def arxiv_id_to_txt(id: str) -> Optional[str]:
+    print("Downloading")
+    res = requests.get(id_to_url(id))
+    if not res.ok:
+        return None
+    return pdf2text(res.content)
 
 
 class ReqType(Enum):
@@ -50,20 +69,84 @@ class ReqType(Enum):
 @dataclass
 class RecomendationReq:
     req_type: ReqType
-    used_model: EmbedderType
-    value: str
-
-
-@dataclass
-class Recommendation:
+    mode: EmbedderType
     arxiv_id: str
-    similarity_score: float # allowed range [-1, 1]
-    title: str
-    category: str
-    date: str
 
 
-class Recommender:
+def map_category(raw_category: str) -> str:
+    names = [name.split('.')[0] for name in raw_category.split()]
+    mapping_to_even_simpler = {
+        "hep-ph": "physics",
+        "cs": "computer science",
+        "math": "mathematics",
+        "physics": "physics",
+        "cond-mat": "physics",
+        "gr-qc": "physics",
+        "astro-ph": "physics",
+        "hep-th": "physics",
+        "hep-ex": "physics",
+        "nlin": "physics",
+        "q-bio" : "quantitative biology",
+        "quant-ph": "physics",
+        "nucl-th": "physics",
+        "hep-lat": "physics",
+        "math-ph": "physics",
+        "nucl-ex": "physics",
+        "stat": "statistics",
+        "q-fin": "quantitative finance",
+        "econ": "economics"
+    }
+    return " ".join({mapping_to_even_simpler[name] for name in names})
+
+
+class TfRecommender:
+
+    def __init__(self):
+        print("Loading tf")
+        self.__df = pd.read_pickle('tf_dataframe.pkl').values
+        self.__vectorizer = TfidfVectorizer(stop_words='english', max_df=0.85)
+        with open("tf_vectorizer.pkl", "rb") as fp:
+            self.__vectorizer = pickle.load(fp)
+        self.__names = self.__load_filenames(Path("text"))
+        self.result = Result()
+
+
+    @staticmethod
+    def __load_filenames(path: Path):
+        return [
+            item.name.split('v')[0] for item in path.iterdir()
+        ]
+
+    def get(self, text: list[str]):
+        return self.__vectorizer.transform(text)
+
+
+    def recommend_paper(self, req: RecomendationReq, limit: int = 25) -> list[Recommendation]:
+        text = arxiv_id_to_txt(req.arxiv_id)
+        if text is None:
+            raise RecommendationException("Failed the download")
+
+        vec = self.get([text])[0]
+        cosines = cosine_similarity(vec, self.__df)[0]
+        indicies = np.argsort(cosines)[-limit:][::-1]
+        res = []
+        for index in indicies:
+            arxiv_id = self.__names[index]
+            meta = self.result.get_metadata(arxiv_id)
+            if meta is None:
+                continue
+            res.append(Recommendation(
+                arxiv_id,
+                cosines[index],
+                str(meta.title),
+                map_category(str(meta.categories)),
+                str(meta.authors),
+                str(meta.update_date)
+            ))
+        return res
+
+
+class RecommenderEmb:
     def __init__(self, mode: EmbedderType):
         print("Loading data")
         self.result = Result()
@@ -74,45 +157,53 @@ class Recommender:
         numbers = [number for _, number in data]
         self.__data = np.vstack(self.__scaler.fit_transform(numbers))
 
-    def recomend_paper(self, req: RecomendationReq, limit = 10) -> list[Recommendation]:
+    def recommend_paper(self, req: RecomendationReq, limit = 10) -> list[Recommendation]:
         if req.req_type != ReqType.ARXIV_ID:
             raise RecommendationException("Unsupported mode")
 
-        if (text := self.__arxiv_id_to_txt(req.value)) is None:
+        if (text := arxiv_id_to_txt(req.arxiv_id)) is None:
             raise RecommendationException("Article download failed")
 
         print("Evaluating")
         embedding_values = self.__embedder.get(text)
 
-        # if req.req_type == ReqType.ARXIV_ID and req.value not in self.result.get_processed_names(req.used_model):
-        #     print("Saving to db")
-        #     self.result.add(req.value, embedding_values, req.used_model.value)
-
         print("Transforming")
         return self.__recommend(embedding_values, limit)
 
-    def __recommend(self, embedding_values: np.ndarray, limit: int) -> list[Recommendation]:
+
+    def __recommend(self, embedding_values: np.ndarray, limit: int, ignore_versioned = True) -> list[Recommendation]:
         scaled = self.__scaler.transform(embedding_values.reshape(1, -1))
         distances = cosine_similarity(self.__data, scaled)
         distance_point = sorted(zip(distances, self.__names), key=lambda x: x[0], reverse=True)
         result = []
-        for distance, arxiv_id in distance_point[:limit]:
+
+        added, index = 0, 0
+        seen = set()
+        while added < limit:
+            distance, arxiv_id = distance_point[index]
+            print("Distance, id:", distance, arxiv_id)
+            simple_id = arxiv_id.split('v')[0]
+            index += 1
+            if ignore_versioned and simple_id in seen:
+                continue
+            added += 1
+            seen.add(simple_id)
             meta = self.result.get_metadata(arxiv_id)
-            result.append(Recommendation(arxiv_id, distance[0], meta.title, meta.categories, meta.update_date))
+            result.append(Recommendation(
+                arxiv_id,
+                distance[0],
+                str(meta.title),
+                map_category(str(meta.categories)),
+                str(meta.authors),
+                str(meta.update_date)
+            ))
+
         return result
-
-
-    def __arxiv_id_to_txt(self, id: str) -> Optional[str]:
-        print("Downloading")
-        res = requests.get(id_to_url(id))
-        if not res.ok:
-            return None
-        return pdf2text(res.content)
-
 
 if __name__ == '__main__':
     my_id = "2410.24080"
-    recomender = Recommender(EmbedderType.GLOVE)
-    found = recomender.recomend_paper(RecomendationReq(ReqType.ARXIV_ID, EmbedderType.BERT, my_id))
+    recomender = RecommenderEmb(EmbedderType.BERT)
+    # recomender = TfRecommender()
+    found = recomender.recommend_paper(RecomendationReq(ReqType.ARXIV_ID, EmbedderType.BERT, my_id))
     print(found)
     recomender.result.finish()

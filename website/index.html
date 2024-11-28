@@ -4,42 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Article recommender</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 0px;
-            margin: 0px;
-        }
-        form {
-            max-width: 400px;
-            margin: 0 auto;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-        input {
-            width: 100%;
-            padding: 8px;
-            margin: 10px 0;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        button {
-            width: 100%;
-            padding: 10px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        table {
-            padding: auto 0;
-        }
-    </style>
+
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <h1 class="title">Find your Arxiv article!</h1>
@@ -48,22 +14,26 @@
         <label for="arxiv-id">Arxiv id:</label>
         <input type="text" id="arxiv-id" name="arxiv-id" required>
 
-        <label for="method">Recommendation method: </label>
-        <select name="method" id="method">  
-            <option value="1">BERT</option>
-            <option value="2">GloVe</option>
-            <option value="3">tf-idf</option>
-        </select>
+        <!-- <label for="method">Recommendation method: </label> -->
+        <!-- <select name="method" id="method">   -->
+        <!--     <option value="1">BERT</option> -->
+        <!--     <option value="2">GloVe</option> -->
+        <!--     <option value="3">tf-idf</option> -->
+        <!-- </select> -->
 
         <button type="submit">Submit</button>
     </form>
 
-    <table id="results-table" style="display: none;">
+
+    <table id="glove-table" style="display: none;">
+        <caption><strong>GloVe Recommendations</strong></caption>
         <thead>
             <tr>
                 <th>Article ID</th>
                 <th>Similarity Score</th>
                 <th>Title</th>
+                <th>Authors</th>
+                <th>Category</th>
                 <th>Date</th>
             </tr>
         </thead>
@@ -71,7 +41,41 @@
             <!-- Results will be dynamically inserted here -->
         </tbody>
     </table>
+
+    <table id="bert-table" style="display: none;">
+        <caption><strong>BERT Recommendations</strong></caption>
+        <thead>
+            <tr>
+                <th>Article ID</th>
+                <th>Similarity Score</th>
+                <th>Title</th>
+                <th>Authors</th>
+                <th>Category</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Results will be dynamically inserted here -->
+        </tbody>
     </table>
+
+    <table id="tf-table" style="display: none;">
+        <caption><strong>TF-IDF Recommendations</strong></caption>
+        <thead>
+            <tr>
+                <th>Article ID</th>
+                <th>Similarity Score</th>
+                <th>Title</th>
+                <th>Authors</th>
+                <th>Category</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Results will be dynamically inserted here -->
+        </tbody>
+    </table>
+
 
     <script src="script.js"></script>
 </body>

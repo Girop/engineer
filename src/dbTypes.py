@@ -6,7 +6,7 @@ Base = declarative_base()
 
 class Embedders(Base):
 
-    __tablename__ = 'meta_embedders'
+    __tablename__ = 'embedders'
 
     modelId = Column(Integer, unique=True, nullable=False, primary_key=True, autoincrement=False)
     shape = Column(Integer, nullable=False)
