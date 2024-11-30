@@ -1,8 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from embed import EmbedderType
-from findPapers import *
+from findPapers import (
+    Recommender,
+    RecommenderType,
+    RecomendationReq,
+    RecommendationException,
+    ReqType
+)
 import dataclasses
+from typing import Optional
 
 app = FastAPI()
 
@@ -14,24 +20,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-global_bert = RecommenderEmb(EmbedderType.BERT)
-global_glove = RecommenderEmb(EmbedderType.GLOVE)
-global_idf = TfRecommender()
+global_bert = Recommender(RecommenderType.BERT)
+global_glove = Recommender(RecommenderType.GLOVE)
+global_idf = Recommender(RecommenderType.IDF_TF)
 
 
-def get_method(mode: EmbedderType):
-    if mode == EmbedderType.GLOVE:
+def get_method(mode: RecommenderType):
+    if mode == RecommenderType.GLOVE:
         return global_glove
-    if mode == EmbedderType.BERT:
+    if mode == RecommenderType.BERT:
         return global_bert
     return global_idf
 
 
-def server_recommend(req: RecomendationReq, limit: int):
-    embedder = get_method(req.mode)
+def server_recommend(req: RecomendationReq):
+    recommender = get_method(req.mode)
     return [
         dataclasses.asdict(item) for item in
-        embedder.recommend_paper(req, limit)
+        recommender.recommend(req)
     ]
 
 
@@ -40,19 +46,45 @@ async def read_root():
     return {"message": "Hello, World!"}
 
 
-@app.get('/recommend/')
-async def recommend(document_id: str, mode: int, limit: int):
+def recommend_inner(mode, limit, req_type, payload):
     avalible_modes = [1,2,3]
     result = []
-    if document_id == '':
-        return {'error': 'No document provided', 'result': result}
 
     if mode not in avalible_modes:
         return {'error': 'Invalid mode provided', 'result': result}
 
-    req = RecomendationReq(ReqType.ARXIV_ID, EmbedderType(mode), document_id)
+    if req_type not in [1,2,3]:
+        return {'error': 'Invalid req type provided', 'result': result}
+
     try:
-        result.extend(server_recommend(req, min(limit, 25)))
+        req = RecomendationReq(
+            ReqType(req_type),
+            RecommenderType(mode),
+            payload,
+            min(limit, 25)
+        )
+        result.extend(server_recommend(req))
     except RecommendationException as e:
         return {'error': f'Recommendation failed: {e.message}', 'result': result}
     return {'error': 'None', 'result': result}
+
+
+@app.post('/recommend/pdf/')
+async def recommend_pdf(
+    mode: int = Form(...),
+    limit: int = Form(...),
+    req_type: int = Form(...),
+    payload: UploadFile = File(None)
+):
+    pdf_file = await payload.read()
+    return recommend_inner(mode, limit, req_type, pdf_file)
+
+
+@app.post('/recommend/')
+async def recommend(
+    mode: int = Form(...),
+    limit: int = Form(...),
+    req_type: int = Form(...),
+    payload: str = Form(...)
+):
+    return recommend_inner(mode, limit, req_type, payload)

@@ -6,7 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import pandas as pd
 from pathlib import Path
 import io
-from embed import GeneralEmbedder, Result, EmbedderType
+from embed import GeneralEmbedder, Result, RecommenderType
 import numpy as np
 from dataclasses import dataclass
 from sklearn.preprocessing import StandardScaler
@@ -15,6 +15,7 @@ from enum import Enum
 from typing import Optional
 import requests
 import pickle
+from time import time
 
 
 class RecommendationException(Exception):
@@ -69,8 +70,9 @@ class ReqType(Enum):
 @dataclass
 class RecomendationReq:
     req_type: ReqType
-    mode: EmbedderType
-    arxiv_id: str
+    mode: RecommenderType
+    content: str
+    limit: int
 
 
 def map_category(raw_category: str) -> str:
@@ -96,7 +98,23 @@ def map_category(raw_category: str) -> str:
         "q-fin": "quantitative finance",
         "econ": "economics"
     }
-    return " ".join({mapping_to_even_simpler[name] for name in names})
+    return ", ".join({mapping_to_even_simpler[name] for name in names})
+
+
+def get_text_from_mode(mode, content):
+    if mode == ReqType.TEXT:
+        return content
+
+    if mode == ReqType.ARXIV_ID:
+        txt = arxiv_id_to_txt(content)
+        if txt is None:
+            raise RecommendationException("Article download failed")
+        return txt
+
+    if mode != ReqType.PDF:
+        raise RecommendationException("Unsupported mode")
+
+    return pdf2text(content)
 
 
 class TfRecommender:
@@ -111,6 +129,10 @@ class TfRecommender:
         self.result = Result()
 
 
+    def finish(self):
+        self.result.finish()
+
+
     @staticmethod
     def __load_filenames(path: Path):
         return [
@@ -121,14 +143,11 @@ class TfRecommender:
         return self.__vectorizer.transform(text)
 
 
-    def recommend_paper(self, req: RecomendationReq, limit: int = 25) -> list[Recommendation]:
-        text = arxiv_id_to_txt(req.arxiv_id)
-        if text is None:
-            raise RecommendationException("Failed the download")
-
+    def recommend_papers(self, text: str, req: RecomendationReq) -> list[Recommendation]:
+        print("Evaluation itf")
         vec = self.get([text])[0]
         cosines = cosine_similarity(vec, self.__df)[0]
-        indicies = np.argsort(cosines)[-limit:][::-1]
+        indicies = np.argsort(cosines)[-req.limit:][::-1]
         res = []
         for index in indicies:
             arxiv_id = self.__names[index]
@@ -147,7 +166,7 @@ class TfRecommender:
 
 
 class RecommenderEmb:
-    def __init__(self, mode: EmbedderType):
+    def __init__(self, mode: RecommenderType):
         print("Loading data")
         self.result = Result()
         self.__scaler = StandardScaler()
@@ -157,18 +176,17 @@ class RecommenderEmb:
         numbers = [number for _, number in data]
         self.__data = np.vstack(self.__scaler.fit_transform(numbers))
 
-    def recommend_paper(self, req: RecomendationReq, limit = 10) -> list[Recommendation]:
-        if req.req_type != ReqType.ARXIV_ID:
-            raise RecommendationException("Unsupported mode")
 
-        if (text := arxiv_id_to_txt(req.arxiv_id)) is None:
-            raise RecommendationException("Article download failed")
-
+    def recommend_papers(self, text: str, req: RecomendationReq) -> list[Recommendation]:
         print("Evaluating")
         embedding_values = self.__embedder.get(text)
 
         print("Transforming")
-        return self.__recommend(embedding_values, limit)
+        return self.__recommend(embedding_values, req.limit)
+
+
+    def finish(self):
+        self.result.finish()
 
 
     def __recommend(self, embedding_values: np.ndarray, limit: int, ignore_versioned = True) -> list[Recommendation]:
@@ -181,7 +199,6 @@ class RecommenderEmb:
         seen = set()
         while added < limit:
             distance, arxiv_id = distance_point[index]
-            print("Distance, id:", distance, arxiv_id)
             simple_id = arxiv_id.split('v')[0]
             index += 1
             if ignore_versioned and simple_id in seen:
@@ -200,10 +217,28 @@ class RecommenderEmb:
 
         return result
 
+
+
+class Recommender:
+    def __init__(self, method: RecommenderType) -> None:
+        if method == RecommenderType.BERT or method == RecommenderType.GLOVE:
+            self.__recommender = RecommenderEmb(method)
+        else:
+            self.__recommender = TfRecommender()
+
+    def recommend(self, req) -> list[Recommendation]:
+        text = get_text_from_mode(req.req_type, req.content)
+        return self.__recommender.recommend_papers(text, req)
+
+    def finish(self):
+        # TODO Timing measurement
+        self.__recommender.finish()
+
 if __name__ == '__main__':
     my_id = "2410.24080"
-    recomender = RecommenderEmb(EmbedderType.BERT)
+    recomender = Recommender(RecommenderType.BERT)
     # recomender = TfRecommender()
-    found = recomender.recommend_paper(RecomendationReq(ReqType.ARXIV_ID, EmbedderType.BERT, my_id))
+    req = RecomendationReq(ReqType.ARXIV_ID, RecommenderType.BERT, my_id, 10)
+    found = recomender.recommend(req)
     print(found)
-    recomender.result.finish()
+    recomender.finish()

@@ -11,19 +11,31 @@
     <h1 class="title">Find your Arxiv article!</h1>
 
     <form id="article-req">
-        <label for="arxiv-id">Arxiv id:</label>
-        <input type="text" id="arxiv-id" name="arxiv-id" required>
+        <div id="input-options">
+            <button type="button" class="input-button active" data-target="arxiv-input">Arxiv ID</button>
+            <button type="button" class="input-button" data-target="text-input">Text Samples</button>
+            <button type="button" class="input-button" data-target="pdf-input">PDF Files</button>
+        </div>
 
-        <!-- <label for="method">Recommendation method: </label> -->
-        <!-- <select name="method" id="method">   -->
-        <!--     <option value="1">BERT</option> -->
-        <!--     <option value="2">GloVe</option> -->
-        <!--     <option value="3">tf-idf</option> -->
-        <!-- </select> -->
+        <div id="inputs-container">
+            <div id="arxiv-input" class="input-field">
+                <label for="arxiv-id">Arxiv ID:</label>
+                <input type="text" id="arxiv-id" name="arxiv-id">
+            </div>
+
+            <div id="text-input" class="input-field" style="display: none;">
+                <label for="text-sample">Text Sample:</label>
+                <textarea id="text-sample" name="text-sample" rows="4"></textarea>
+            </div>
+
+            <div id="pdf-input" class="input-field" style="display: none;">
+                <label for="pdf-file">Upload PDF:</label>
+                <input type="file" id="pdf-file" name="pdf-file" accept=".pdf">
+            </div>
+        </div>
 
         <button type="submit">Submit</button>
     </form>
-
 
     <table id="glove-table" style="display: none;">
         <caption><strong>GloVe Recommendations</strong></caption>
@@ -76,6 +88,10 @@
         </tbody>
     </table>
 
+    <div id="feedback-section" style="text-align: center; margin-top: 20px; display: none;">
+        
+        <button id="feedback-button"></button>
+    </div>
 
     <script src="script.js"></script>
 </body>

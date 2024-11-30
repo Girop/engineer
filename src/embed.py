@@ -21,7 +21,7 @@ class Embedder(ABC):
         pass
 
 
-class EmbedderType(Enum):
+class RecommenderType(Enum):
     BERT = 1
     GLOVE = 2
     IDF_TF = 3
@@ -108,21 +108,21 @@ class Result:
         self.__session = Session()
 
 
-    def get_processed_names(self, embedder_type: EmbedderType) -> list[str]:
+    def get_processed_names(self, embedder_type: RecommenderType) -> list[str]:
         return [
             str(item.fileName) for item in
             self.__session.query(EmbeddingData).filter(EmbeddingData.usedModelId == embedder_type.value).all()
         ]
 
 
-    def get_values(self, embedder_type: EmbedderType) -> list[tuple[str, np.ndarray]]:
+    def get_values(self, embedder_type: RecommenderType) -> list[tuple[str, np.ndarray]]:
         query = (
             select(EmbeddingData, Embedders)
             .filter(EmbeddingData.usedModelId == embedder_type.value)
             .join(Embedders, EmbeddingData.usedModelId == Embedders.modelId)
         )
         result = self.__session.execute(query).fetchall()
-        used_float = np.float16 if embedder_type == EmbedderType.BERT else np.float32
+        used_float = np.float16 if embedder_type == RecommenderType.BERT else np.float32
 
         return [
             (values.fileName, np.frombuffer(values.values, used_float, embedder.shape))
@@ -147,17 +147,17 @@ class Result:
 
 
 class GeneralEmbedder:
-    def __init__(self, embedder_type: EmbedderType) -> None:
+    def __init__(self, embedder_type: RecommenderType) -> None:
         self.__embedder_type = embedder_type
         self.embedder = self.__get_embedder(embedder_type)()
         self.saving = Result()
         self.__type = embedder_type
 
     @staticmethod
-    def __get_embedder(embedder_type: EmbedderType):
-        if embedder_type == EmbedderType.BERT:
+    def __get_embedder(embedder_type: RecommenderType):
+        if embedder_type == RecommenderType.BERT:
             return BertEmbedder
-        elif embedder_type == EmbedderType.GLOVE:
+        elif embedder_type == RecommenderType.GLOVE:
             return GloveEmbedder
         else:
             raise Exception("Unimplemented method")
@@ -188,7 +188,7 @@ class GeneralEmbedder:
         ][:1024]
 
     def get(self, text: str) -> np.ndarray:
-        adjusted_text = self.__split_text(text) if self.__type == EmbedderType.BERT else text.lower().split()
+        adjusted_text = self.__split_text(text) if self.__type == RecommenderType.BERT else text.lower().split()
         return self.embedder.get(adjusted_text)
 
     def run_for_all(self, input_dir: Path):
@@ -205,7 +205,7 @@ class GeneralEmbedder:
 
 if __name__ == '__main__':
     in_arguments = parse_embed_arguments()
-    current_mode = EmbedderType(in_arguments.mode)
+    current_mode = RecommenderType(in_arguments.mode)
     embedder = GeneralEmbedder(current_mode)
     embedder.run_for_all(in_arguments.input)
     print("Finished")
