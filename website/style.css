@@ -56,7 +56,7 @@ button:hover {
 }
 
 table {
-    width: 90%;
+    width: 30%;
     margin: 20px auto;
     border-collapse: collapse;
     background-color: white;
@@ -119,6 +119,11 @@ a:hover {
 
 .input-field {
     margin: 10px 0;
+}
+
+.result-collection {
+    display: flex;
+    flex-direction: row;
 }
 
 textarea, input[type="text"], input[type="file"] {

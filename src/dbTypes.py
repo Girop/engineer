@@ -46,3 +46,14 @@ class Metadata(Base):
     abstract = Column(String, nullable=False)
     versions = Column(String, nullable=False)
     update_date = Column(String, nullable=False)
+
+
+
+class Ratings(Base):
+
+    __tablename__ = 'ratings'
+
+    id = Column(Integer, primary_key=True)
+    first = Column(Integer, nullable=False)
+    second = Column(Integer, nullable=False)
+    third = Column(Integer, nullable=False)

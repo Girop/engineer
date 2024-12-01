@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
-from dbTypes import EmbeddingData, Embedders, Base, Metadata
+from dbTypes import EmbeddingData, Embedders, Base, Metadata, Ratings
 import gensim
 import torch
 from transformers import BertModel, BertTokenizer
@@ -11,14 +11,6 @@ from tqdm import tqdm
 import numpy as np
 import gc
 from enum import Enum
-from abc import ABC, abstractmethod
-
-
-class Embedder(ABC):
-
-    @abstractmethod
-    def get_from_file(self, path: Path) -> np.ndarray:
-        pass
 
 
 class RecommenderType(Enum):
@@ -34,7 +26,7 @@ def parse_embed_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-class GloveEmbedder(Embedder):
+class GloveEmbedder:
     def __init__(self) -> None:
         glove_file = "glove.6B.300d.txt"
         self.__glove_dict = gensim.models.keyedvectors.load_word2vec_format(glove_file, binary=False, no_header=True)
@@ -57,7 +49,7 @@ class GloveEmbedder(Embedder):
         return res
 
 
-class BertEmbedder(Embedder):
+class BertEmbedder:
     def __init__(self) -> None:
         if not torch.cuda.is_available():
             print("Warning: not running on CUDA")
@@ -107,6 +99,16 @@ class Result:
         Session = sessionmaker(bind=self.__engine)
         self.__session = Session()
 
+
+    def add_rating(self, first: RecommenderType, second: RecommenderType, third: RecommenderType) -> bool:
+        try:
+            self.__session.add(Ratings(first=first.value, second=second.value, third=third.value))
+            self.__session.commit()
+            return True
+        except Exception as e:
+            self.__session.rollback()
+            print(f"Failed to add rating: {e}")
+            return False
 
     def get_processed_names(self, embedder_type: RecommenderType) -> list[str]:
         return [

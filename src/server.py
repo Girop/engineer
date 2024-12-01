@@ -1,5 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from numpy import argsort
+from embed import Result
 from findPapers import (
     Recommender,
     RecommenderType,
@@ -8,7 +11,6 @@ from findPapers import (
     ReqType
 )
 import dataclasses
-from typing import Optional
 
 app = FastAPI()
 
@@ -87,4 +89,29 @@ async def recommend(
     req_type: int = Form(...),
     payload: str = Form(...)
 ):
+    if (len(payload)) <= 2:
+        return {"error": "Too short input", 'result': []}
     return recommend_inner(mode, limit, req_type, payload)
+
+
+class RatingRequest(BaseModel):
+    bert: int
+    glove: int
+    tf: int
+
+
+@app.post('/rating/')
+async def rating(rating: RatingRequest):
+    res = Result()
+    # This has to be done this weird way around because *relations* in the db
+    rankings = [rating.bert, rating.glove, rating.tf]
+    recommenders = [RecommenderType.BERT, RecommenderType.GLOVE, RecommenderType.IDF_TF]
+    elements = {"first": 0, "second": 0, "third": 0}
+
+    for index, key in zip(argsort(rankings), elements.keys()):
+        elements[key] = recommenders[index]
+
+    if not res.add_rating(**elements):
+        print("Rating collection failed")
+
+    return {"message": "rating added"}

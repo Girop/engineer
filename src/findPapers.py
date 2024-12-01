@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Optional
 import requests
 import pickle
-from time import time
+import argparse
 
 
 class RecommendationException(Exception):
@@ -147,16 +147,27 @@ class TfRecommender:
         print("Evaluation itf")
         vec = self.get([text])[0]
         cosines = cosine_similarity(vec, self.__df)[0]
-        indicies = np.argsort(cosines)[-req.limit:][::-1]
+        indicies = np.argsort(cosines)[::-1]
         res = []
-        for index in indicies:
-            arxiv_id = self.__names[index]
+
+        alread_done = set()
+        found_counter = 0
+        for article_index in indicies:
+            if found_counter == req.limit:
+                break
+
+            arxiv_id = self.__names[article_index]
             meta = self.result.get_metadata(arxiv_id)
-            if meta is None:
+
+            if meta is None or (short_id := arxiv_id.split('v')[0]) in alread_done:
                 continue
+
+            alread_done.add(short_id)
+            found_counter += 1
+
             res.append(Recommendation(
                 arxiv_id,
-                cosines[index],
+                cosines[article_index],
                 str(meta.title),
                 map_category(str(meta.categories)),
                 str(meta.authors),
@@ -231,8 +242,17 @@ class Recommender:
         return self.__recommender.recommend_papers(text, req)
 
     def finish(self):
-        # TODO Timing measurement
         self.__recommender.finish()
+
+
+def collect_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--count', type=int, required=True)
+    parser.add_argument('-b', '--batch', type=int, default=100)
+    parser.add_argument('-m', '--metadata', type=Path, help='Path to metadata', default='metadata.json')
+    parser.add_argument('-o', '--output', type=Path, default='arxiv')
+    return parser.parse_args()
+
 
 if __name__ == '__main__':
     my_id = "2410.24080"

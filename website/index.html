@@ -8,9 +8,8 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1 class="title">Find your Arxiv article!</h1>
-
     <form id="article-req">
+        <h1 class="title">Find your Arxiv article!</h1>
         <div id="input-options">
             <button type="button" class="input-button active" data-target="arxiv-input">Arxiv ID</button>
             <button type="button" class="input-button" data-target="text-input">Text Samples</button>
@@ -37,59 +36,96 @@
         <button type="submit">Submit</button>
     </form>
 
-    <table id="glove-table" style="display: none;">
-        <caption><strong>GloVe Recommendations</strong></caption>
-        <thead>
-            <tr>
-                <th>Article ID</th>
-                <th>Similarity Score</th>
-                <th>Title</th>
-                <th>Authors</th>
-                <th>Category</th>
-                <th>Date</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Results will be dynamically inserted here -->
-        </tbody>
-    </table>
+    <form id="rating" hidden>
+        <h1 class="title">Rank the Recommendations</h1>
 
-    <table id="bert-table" style="display: none;">
-        <caption><strong>BERT Recommendations</strong></caption>
-        <thead>
-            <tr>
-                <th>Article ID</th>
-                <th>Similarity Score</th>
-                <th>Title</th>
-                <th>Authors</th>
-                <th>Category</th>
-                <th>Date</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Results will be dynamically inserted here -->
-        </tbody>
-    </table>
+        <div class="rating-option">
+            <label for="rating-glove">GloVe:</label>
+            <select id="rating-glove" class="rating-select">
+                <option value="" hidden>position</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+            </select>
+        </div>
 
-    <table id="tf-table" style="display: none;">
-        <caption><strong>TF-IDF Recommendations</strong></caption>
-        <thead>
-            <tr>
-                <th>Article ID</th>
-                <th>Similarity Score</th>
-                <th>Title</th>
-                <th>Authors</th>
-                <th>Category</th>
-                <th>Date</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Results will be dynamically inserted here -->
-        </tbody>
-    </table>
+        <div class="rating-option">
+            <label for="rating-bert">BERT:</label>
+            <select id="rating-bert" class="rating-select">
+                <option value="" hidden>position</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+            </select>
+        </div>
+
+        <div class="rating-option">
+            <label for="rating-tf">TF-IDF:</label>
+            <select id="rating-tf" class="rating-select">
+                <option value="" hidden>position</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+            </select>
+        </div>
+
+        <button type="submit" id="submit-rating">Send</button>
+    </form>
+
+    <div id="table-collection" class="result-collection">
+        <table id="glove-table" style="display: none;">
+            <caption><strong>GloVe Recommendations</strong></caption>
+            <thead>
+                <tr>
+                    <th>Article ID</th>
+                    <th>Similarity Score</th>
+                    <th>Title</th>
+                    <th>Authors</th>
+                    <th>Category</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Results will be dynamically inserted here -->
+            </tbody>
+        </table>
+
+        <table id="bert-table" style="display: none;">
+            <caption><strong>BERT Recommendations</strong></caption>
+            <thead>
+                <tr>
+                    <th>Article ID</th>
+                    <th>Similarity Score</th>
+                    <th>Title</th>
+                    <th>Authors</th>
+                    <th>Category</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Results will be dynamically inserted here -->
+            </tbody>
+        </table>
+
+        <table id="tf-table" style="display: none;">
+            <caption><strong>TF-IDF Recommendations</strong></caption>
+            <thead>
+                <tr>
+                    <th>Article ID</th>
+                    <th>Similarity Score</th>
+                    <th>Title</th>
+                    <th>Authors</th>
+                    <th>Category</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Results will be dynamically inserted here -->
+            </tbody>
+        </table>
+    </div>
 
     <div id="feedback-section" style="text-align: center; margin-top: 20px; display: none;">
-        
         <button id="feedback-button"></button>
     </div>
 

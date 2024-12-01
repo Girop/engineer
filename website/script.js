@@ -38,6 +38,8 @@ function getAddress(method) {
 }
 
 async function fillTable(table, mode) {
+    const tbody = table.querySelector("tbody");
+    tbody.innerHTML = "";
     const activeTarget = getActiveTarget();
     const payload = getPayload(activeTarget);
 
@@ -58,10 +60,6 @@ async function fillTable(table, mode) {
     }
 
     const data = await response.json();
-
-    const tbody = table.querySelector("tbody");
-    // Clear any previous results
-    tbody.innerHTML = "";
 
     if (data["error"] != "None") {
         throw new Error("Request failed: " + data["error"]);
@@ -90,13 +88,19 @@ function update_table(tableName, method) {
 }
 
 
+const rating = document.getElementById("rating");
+
 document.getElementById("article-req").addEventListener("submit", async function (event) {
     event.preventDefault();
     
     try {
-        await update_table("bert-table", 1);
-        await update_table("glove-table", 2);
-        await update_table("tf-table", 3);
+        const updates = [
+            await update_table("tf-table", 3),
+            await update_table("glove-table", 2),
+            await update_table("bert-table", 1),
+        ];
+        await Promise.all(updates);
+        rating.style.display = "block";
     } catch (error) {
         console.error("Error:", error);
         alert("Failed to fetch recommendations. Please try again later.");
@@ -104,20 +108,89 @@ document.getElementById("article-req").addEventListener("submit", async function
 });
 
 
-const inputButtons = document.querySelectorAll(".input-button");
-const inputFields = document.querySelectorAll(".input-field");
+const input_buttons = document.querySelectorAll(".input-button");
+const input_fields = document.querySelectorAll(".input-field");
 
-inputButtons.forEach((button) => {
+input_buttons.forEach((button) => {
     button.addEventListener("click", () => {
-        inputButtons.forEach((btn) => btn.classList.remove("active"));
+        input_buttons.forEach((btn) => btn.classList.remove("active"));
 
         button.classList.add("active");
 
-        inputFields.forEach((field) => {
+        input_fields.forEach((field) => {
             field.style.display = "none";
         });
 
         const target = button.getAttribute("data-target");
         document.getElementById(target).style.display = "block";
     });
+});
+
+
+const selectOptions = document.querySelectorAll(".rating-select");
+
+selectOptions.forEach((elem) => {
+    elem.addEventListener("change", () => {
+        handleMutualExclusion();
+    });
+});
+
+function handleMutualExclusion() {
+    const selectedValues = Array.from(selectOptions)
+        .map(select => select.value)
+        .filter(value => value !== "");
+
+    selectOptions.forEach(select => {
+        const currentValue = select.value;
+
+        Array.from(select.options).forEach(option => {
+            if (selectedValues.includes(option.value) && option.value !== currentValue) {
+                option.style.display = "none";
+            } else {
+                option.style.display = "";
+            }
+        });
+    });
+}
+
+
+rating.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const rankings = {"bert": null, "glove": null, "tf": null};
+
+    const shouldSend = true;
+
+    selectOptions.forEach((select, index) => {
+        const name = ["glove", "bert", "tf"]
+
+
+        if (select.value == "" || select.value == null) {
+            shouldSend = false;
+            return;
+        }
+
+        const key = name[index];
+        rankings[key] = parseInt(select.value, 10);
+    });
+
+    if (!shouldSend) {
+        alert("Feedback submitted");
+        return;
+    }
+
+
+    const result = JSON.stringify(rankings)
+    console.log("Submitted Rankings:", result);
+    const address = "http://127.0.0.1:8000/rating/";
+
+    await fetch(address, {
+        'method': "Post",
+        "headers": {
+            'Content-Type': 'application/json',
+        },
+        body: result,
+    });
+
+    alert("Thanks for feedback!");
+    rating.style.display = "none";
 });
