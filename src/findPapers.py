@@ -1,4 +1,5 @@
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+from collections import defaultdict
 from pdfminer.converter import TextConverter
 from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
@@ -15,6 +16,7 @@ from enum import Enum
 from typing import Optional
 import requests
 import pickle
+from time import time
 import argparse
 
 
@@ -232,6 +234,7 @@ class RecommenderEmb:
 
 class Recommender:
     def __init__(self, method: RecommenderType) -> None:
+        self.timings = defaultdict(lambda: [])
         if method == RecommenderType.BERT or method == RecommenderType.GLOVE:
             self.__recommender = RecommenderEmb(method)
         else:
@@ -239,26 +242,35 @@ class Recommender:
 
     def recommend(self, req) -> list[Recommendation]:
         text = get_text_from_mode(req.req_type, req.content)
-        return self.__recommender.recommend_papers(text, req)
+        t1 = time()
+        res = self.__recommender.recommend_papers(text, req)
+        self.timings[req.mode].append(time() - t1)
+        return res
 
     def finish(self):
+        print("Recommendation timings: \n", self.timings)
         self.__recommender.finish()
 
 
 def collect_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--count', type=int, required=True)
-    parser.add_argument('-b', '--batch', type=int, default=100)
-    parser.add_argument('-m', '--metadata', type=Path, help='Path to metadata', default='metadata.json')
-    parser.add_argument('-o', '--output', type=Path, default='arxiv')
+    parser.add_argument('-m', '--mode', type=int, required=True)
+    parser.add_argument('-c', '--content', type=str, required=True)
+    # parser.add_argument('-t', '--type', type=int, required=True)
+    parser.add_argument('-l', '--limit', type=int, default=10)
     return parser.parse_args()
 
 
 if __name__ == '__main__':
-    my_id = "2410.24080"
-    recomender = Recommender(RecommenderType.BERT)
-    # recomender = TfRecommender()
-    req = RecomendationReq(ReqType.ARXIV_ID, RecommenderType.BERT, my_id, 10)
-    found = recomender.recommend(req)
-    print(found)
-    recomender.finish()
+    args = collect_args()
+
+    # my_id = "2410.24080"
+    recommender_type = RecommenderType(args.mode)
+    recommender = Recommender(recommender_type)
+    req = RecomendationReq(ReqType.ARXIV_ID, recommender_type, args.content, args.limit)
+    found = recommender.recommend(req)
+    print("No. - arXiv ID - title - authors - category - date")
+    for i, item in enumerate(found):
+        print(f"{i} - {item.arxiv_id} - {item.title} - {item.authors} - {item.category} - {item.date}")
+
+    recommender.finish()

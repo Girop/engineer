@@ -1,8 +1,25 @@
-import pandas as pd
-import pickle
+import seaborn as sns
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+
+from sklearn.preprocessing import StandardScaler
+
+from embed import RecommenderType, Result
 
 
-with open("td_short.pkl", "rb") as fp:
-    df = pickle.load(fp)
+result = Result()
+scaler = StandardScaler()
+data = result.get_values(RecommenderType.BERT)[:1000]
 
-print(df)
+numbers = [number for _, number in data]
+
+before = PCA(2).fit_transform(numbers)
+after = scaler.fit_transform(before)
+
+
+# plt.scatter([val for val, _ in before], [val for _, val in before])
+
+plt.scatter([val for val, _ in after], [val for _, val in after])
+
+
+plt.show()

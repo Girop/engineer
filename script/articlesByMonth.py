@@ -55,6 +55,7 @@ print(counts)
 print("Avg:", sum(counts) / len(counts))
 print("Min:", min(counts))
 print("Max:", max(counts))
+print("First: ", counts[0])
 
 
 exit()

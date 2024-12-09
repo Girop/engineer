@@ -171,6 +171,7 @@ rating.addEventListener("submit", async (event) => {
 
         const key = name[index];
         rankings[key] = parseInt(select.value, 10);
+        select.value = "";
     });
 
     if (!shouldSend) {

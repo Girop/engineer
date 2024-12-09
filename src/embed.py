@@ -10,6 +10,7 @@ import argparse
 from tqdm import tqdm
 import numpy as np
 import gc
+from time import time
 from enum import Enum
 
 
@@ -154,6 +155,7 @@ class GeneralEmbedder:
         self.embedder = self.__get_embedder(embedder_type)()
         self.saving = Result()
         self.__type = embedder_type
+        self.__timings = []
 
     @staticmethod
     def __get_embedder(embedder_type: RecommenderType):
@@ -180,7 +182,8 @@ class GeneralEmbedder:
 
         print(f"All files: {len(files)}")
         print(f"Articles to be processed: {len(files) - len(skipped)}, Skipping: {len(skipped)} + versioned")
-        return self.__remove_versioned(set(files) - set(previous))
+        return list(set(files) - set(previous))
+        # return self.__remove_versioned(set(files) - set(previous))
 
     @staticmethod
     def __split_text(text: str) -> list[str]:
@@ -197,12 +200,18 @@ class GeneralEmbedder:
         filepaths = self.__get_files_to_process(input_dir)
         for filepath in tqdm(filepaths):
             try:
+                t1 = time()
                 embedding = self.embedder.get_from_file(filepath)
+                self.__timings.append(time() - t1)
                 self.saving.add(str(filepath.stem), embedding, current_mode.value)
             except Exception as e:
                 print(f"Failed: {e}")
             gc.collect()
         self.saving.finish()
+        self.__print_timings()
+
+    def __print_timings(self):
+        print("\nTimings: \n", self.__timings)
 
 
 if __name__ == '__main__':
